@@ -78,7 +78,7 @@ Watch Flux kustomizations with diff highlighting:
 
 - **Fullscreen mode.** Pressing **f** hides all UI chrome (header, footer, border) so you can select and copy multi-line text cleanly.
 
-- **Scrollable output.** Output longer than the terminal is scrollable via keyboard or mouse wheel, rather than being silently truncated.
+- **Scrollable output.** Output longer than the terminal is scrollable both vertically and horizontally via keyboard or mouse wheel. Scroll position is preserved across refreshes, so you don't lose your place when the command re-runs. GNU watch silently truncates anything that doesn't fit.
 
 - **Modern TUI.** Built with Bubble Tea and Lip Gloss. Features a styled header bar, bordered viewport, animated spinner during execution, and a contextual help bar.
 
