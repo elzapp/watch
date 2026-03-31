@@ -139,7 +139,7 @@ type model struct {
 func initialModel(command string, args []string, interval time.Duration, diffMode bool, noWrap bool) model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#FAFAFA"))
 
 	h := help.New()
 	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FAFAFA"))
@@ -264,6 +264,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		if m.executing {
+			return m, tickCmd(m.interval)
+		}
 		m.executing = true
 		return m, tea.Batch(runCommand(m.command, m.args), tickCmd(m.interval))
 	}
