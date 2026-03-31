@@ -1,5 +1,7 @@
 # GOWATCH(1)
 
+![ ](demo.gif)
+
 ## NAME
 
 **gowatch** - execute a program periodically, showing output fullscreen
