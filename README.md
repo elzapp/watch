@@ -107,4 +107,4 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss]
 
 ## LICENSE
 
-**gowatch** is licensed under the GNU General Public License v3.0. See the `LICENSE` file for the full text, or run **gowatch --license**.
+**gowatch** is licensed under the GNU General Public License v3.0. See the [`LICENSE`](LICENSE) file for the full text, or run **gowatch --license**. Third-party library notices are in [`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES).
