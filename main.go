@@ -470,10 +470,7 @@ var (
 )
 
 func (m model) renderHeader() string {
-	cmd := m.command
-	if len(m.args) > 0 {
-		cmd += " " + strings.Join(m.args, " ")
-	}
+	cmd := buildCommandString(m.command, m.args)
 
 	var spinnerStr string
 	if m.executing {
@@ -607,12 +604,16 @@ func (m model) renderFooter() string {
 
 // Commands
 
+func buildCommandString(command string, args []string) string {
+	if len(args) > 0 {
+		return command + " " + strings.Join(args, " ")
+	}
+	return command
+}
+
 func runCommand(command string, args []string) tea.Cmd {
 	return func() tea.Msg {
-		fullCmd := command
-		if len(args) > 0 {
-			fullCmd += " " + strings.Join(args, " ")
-		}
+		fullCmd := buildCommandString(command, args)
 		cmd := exec.Command("sh", "-c", fullCmd)
 		cmd.Env = os.Environ()
 		out, err := cmd.CombinedOutput()
