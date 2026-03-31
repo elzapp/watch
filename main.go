@@ -592,6 +592,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&diffMode, "differences", "d", false, "highlight differences")
 	rootCmd.Flags().BoolVarP(&noWrap, "no-wrap", "w", false, "turn off line wrapping")
 	rootCmd.Flags().BoolVar(&showLicense, "license", false, "display the license")
+	rootCmd.Flags().SetInterspersed(false)
 
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		printHelp()
