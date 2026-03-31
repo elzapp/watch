@@ -64,6 +64,10 @@ Watch container status:
 
     gowatch -n 3 docker ps
 
+Watch Flux kustomizations with diff highlighting:
+
+    gowatch -d kubectl get kustomization -A
+
 ## DIFFERENCES FROM GNU WATCH
 
 **gowatch** is modelled after GNU **watch**(1), with the following differences:
