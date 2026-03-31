@@ -6,7 +6,7 @@
 
 ## SYNOPSIS
 
-**gowatch** [**-d**] [**-n** *seconds*] *command* [*args*...]
+**gowatch** [**-d**] [**-w**] [**-n** *seconds*] *command* [*args*...]
 
 ## DESCRIPTION
 
@@ -22,6 +22,7 @@ The command is given to `sh -c`, which means shell features like pipes, redirect
 |------|-------------|
 | **-n** *seconds* | Set the update interval in seconds. Default is **2.0**. Fractional values are accepted. |
 | **-d** | Enable difference highlighting. Changes between successive updates are highlighted using an LCS-based diff algorithm. |
+| **-w** | Turn off line wrapping. Long lines are truncated to the viewport width instead of wrapping. Can also be toggled at runtime with **w**. |
 | **--license** | Display the license and exit. |
 
 ## KEYS
@@ -33,6 +34,7 @@ The command is given to `sh -c`, which means shell features like pipes, redirect
 | **Space** | Force an immediate refresh |
 | **+** / **-** | Increase / decrease update frequency by 0.2s |
 | **d** | Toggle difference highlighting |
+| **w** | Toggle line wrapping |
 | **f** | Toggle fullscreen (hides header, footer, and border for clean text selection) |
 | **?** | Toggle full help view |
 | **j/k**, **Up/Down** | Scroll output |
@@ -90,7 +92,6 @@ Watch container status:
 
 - **No `--no-title` / `-t` flag.** The header bar cannot be hidden via a flag (though pressing **f** hides all chrome at runtime).
 
-- **No `--no-wrap` / `-w` flag.** Line wrapping behavior is not configurable.
 
 - **No `--precise` / `-p` flag.** Intervals are measured from command completion, not wall-clock aligned.
 

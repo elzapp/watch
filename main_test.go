@@ -12,7 +12,7 @@ import (
 
 // helper: create a model and simulate a WindowSizeMsg so it's ready
 func readyModel(opts ...func(*model)) model {
-	m := initialModel("echo", []string{"hello"}, 2*time.Second, false)
+	m := initialModel("echo", []string{"hello"}, 2*time.Second, false, false)
 	for _, opt := range opts {
 		opt(&m)
 	}
@@ -33,7 +33,7 @@ func keyPress(k string) tea.KeyPressMsg {
 // ─── GNU watch feature: default interval is 2 seconds ───────────────────────
 
 func TestDefaultInterval(t *testing.T) {
-	m := initialModel("date", nil, 2*time.Second, false)
+	m := initialModel("date", nil, 2*time.Second, false, false)
 	if m.interval != 2*time.Second {
 		t.Errorf("expected default interval 2s, got %v", m.interval)
 	}
@@ -42,7 +42,7 @@ func TestDefaultInterval(t *testing.T) {
 // ─── GNU watch feature: -n flag sets custom interval ────────────────────────
 
 func TestCustomInterval(t *testing.T) {
-	m := initialModel("date", nil, 500*time.Millisecond, false)
+	m := initialModel("date", nil, 500*time.Millisecond, false, false)
 	if m.interval != 500*time.Millisecond {
 		t.Errorf("expected interval 500ms, got %v", m.interval)
 	}
@@ -227,7 +227,7 @@ func TestHeaderShowsIntervalAndCommand(t *testing.T) {
 }
 
 func TestHeaderShowsCommandWithArgs(t *testing.T) {
-	m := initialModel("ls", []string{"-la", "/tmp"}, 2*time.Second, false)
+	m := initialModel("ls", []string{"-la", "/tmp"}, 2*time.Second, false, false)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	um := updated.(model)
 	header := um.renderHeader()
@@ -503,6 +503,7 @@ func TestKeyBindings(t *testing.T) {
 		{"faster", keys.Faster, []string{"+", "="}},
 		{"slower", keys.Slower, []string{"-"}},
 		{"diff", keys.ToggleDiff, []string{"d"}},
+		{"no-wrap", keys.ToggleWrap, []string{"w"}},
 		{"fullscreen", keys.Fullscreen, []string{"f"}},
 		{"help", keys.Help, []string{"?"}},
 	}
@@ -526,9 +527,9 @@ func TestKeyBindings(t *testing.T) {
 
 func TestShortHelpContainsAllBindings(t *testing.T) {
 	short := keys.ShortHelp()
-	// Should have: quit, refresh, faster, slower, diff, fullscreen, help
-	if len(short) < 7 {
-		t.Errorf("expected at least 7 short help bindings, got %d", len(short))
+	// Should have: quit, refresh, faster, slower, diff, no-wrap, fullscreen, help
+	if len(short) < 8 {
+		t.Errorf("expected at least 8 short help bindings, got %d", len(short))
 	}
 }
 
@@ -542,10 +543,72 @@ func TestFullHelpIsGrouped(t *testing.T) {
 // ─── Init returns commands for first run, tick, and spinner ─────────────────
 
 func TestInitReturnsBatchCmd(t *testing.T) {
-	m := initialModel("echo", []string{"test"}, 2*time.Second, false)
+	m := initialModel("echo", []string{"test"}, 2*time.Second, false, false)
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init should return a batch command (runCommand + tick + spinner)")
+	}
+}
+
+// ─── No-wrap mode sets viewport SoftWrap ────────────────────────────────────
+
+func TestNoWrapDisablesSoftWrap(t *testing.T) {
+	m := readyModel(func(m *model) { m.noWrap = true })
+	if m.viewport.SoftWrap {
+		t.Error("expected SoftWrap=false when noWrap=true")
+	}
+}
+
+func TestDefaultEnablesSoftWrap(t *testing.T) {
+	m := readyModel()
+	if !m.viewport.SoftWrap {
+		t.Error("expected SoftWrap=true by default")
+	}
+}
+
+func TestWKeyTogglesSoftWrap(t *testing.T) {
+	m := readyModel()
+	if !m.viewport.SoftWrap {
+		t.Fatal("expected SoftWrap=true initially")
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'w'})
+	um := updated.(model)
+	if um.viewport.SoftWrap {
+		t.Error("expected SoftWrap=false after pressing w")
+	}
+	if !um.noWrap {
+		t.Error("expected noWrap=true after pressing w")
+	}
+
+	updated, _ = um.Update(tea.KeyPressMsg{Code: 'w'})
+	um = updated.(model)
+	if !um.viewport.SoftWrap {
+		t.Error("expected SoftWrap=true after pressing w again")
+	}
+}
+
+// ─── Diff with Scandinavian characters ──────────────────────────────────────
+
+func TestComputeDiffWithScandinavianLines(t *testing.T) {
+	old := []string{"blåbær", "rødgrøt", "ærlig"}
+	new := []string{"blåbær", "grønnkål", "ærlig"}
+	result := computeDiff(old, new)
+
+	if len(result) != 4 {
+		t.Fatalf("expected 4 ops, got %d: %v", len(result), result)
+	}
+	if result[0].op != diffEqual || result[0].text != "blåbær" {
+		t.Errorf("expected equal 'blåbær', got %v", result[0])
+	}
+	if result[1].op != diffDelete || result[1].text != "rødgrøt" {
+		t.Errorf("expected delete 'rødgrøt', got %v", result[1])
+	}
+	if result[2].op != diffInsert || result[2].text != "grønnkål" {
+		t.Errorf("expected insert 'grønnkål', got %v", result[2])
+	}
+	if result[3].op != diffEqual || result[3].text != "ærlig" {
+		t.Errorf("expected equal 'ærlig', got %v", result[3])
 	}
 }
 

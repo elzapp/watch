@@ -43,19 +43,20 @@ type keyMap struct {
 	Faster     key.Binding
 	Slower     key.Binding
 	ToggleDiff key.Binding
+	ToggleWrap key.Binding
 	Fullscreen key.Binding
 	Help       key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Quit, k.Refresh, k.Faster, k.Slower, k.ToggleDiff, k.Fullscreen, k.Help}
+	return []key.Binding{k.Quit, k.Refresh, k.Faster, k.Slower, k.ToggleDiff, k.ToggleWrap, k.Fullscreen, k.Help}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Quit, k.Suspend},
 		{k.Refresh, k.Faster, k.Slower},
-		{k.ToggleDiff, k.Fullscreen, k.Help},
+		{k.ToggleDiff, k.ToggleWrap, k.Fullscreen, k.Help},
 	}
 }
 
@@ -84,6 +85,10 @@ var keys = keyMap{
 		key.WithKeys("d"),
 		key.WithHelp("d", "diff"),
 	),
+	ToggleWrap: key.NewBinding(
+		key.WithKeys("w"),
+		key.WithHelp("w", "no-wrap"),
+	),
 	Fullscreen: key.NewBinding(
 		key.WithKeys("f"),
 		key.WithHelp("f", "fullscreen"),
@@ -101,6 +106,7 @@ type model struct {
 	args     []string
 	interval time.Duration
 	diffMode bool
+	noWrap   bool
 
 	output     string
 	prevOutput string
@@ -118,7 +124,7 @@ type model struct {
 	keys     keyMap
 }
 
-func initialModel(command string, args []string, interval time.Duration, diffMode bool) model {
+func initialModel(command string, args []string, interval time.Duration, diffMode bool, noWrap bool) model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
@@ -136,6 +142,7 @@ func initialModel(command string, args []string, interval time.Duration, diffMod
 		args:      args,
 		interval:  interval,
 		diffMode:  diffMode,
+		noWrap:    noWrap,
 		executing: true,
 		spinner:   s,
 		help:      h,
@@ -161,6 +168,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				viewport.WithWidth(msg.Width),
 				viewport.WithHeight(msg.Height),
 			)
+			m.viewport.SoftWrap = !m.noWrap
 			m.ready = true
 		}
 		m.resizeViewport()
@@ -186,6 +194,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.ToggleDiff):
 			m.diffMode = !m.diffMode
+			m.updateViewportContent()
+			return m, nil
+		case key.Matches(msg, m.keys.ToggleWrap):
+			m.noWrap = !m.noWrap
+			m.viewport.SoftWrap = !m.noWrap
 			m.updateViewportContent()
 			return m, nil
 		case key.Matches(msg, m.keys.Fullscreen):
@@ -414,12 +427,12 @@ func (m model) renderHeader() string {
 func (m model) buildContent() string {
 	lines := strings.Split(m.output, "\n")
 
-	if !m.diffMode {
-		return m.output
-	}
+	var content string
 
-	// No previous output yet — just indent all lines to match diff markers
-	if m.prevOutput == "" {
+	if !m.diffMode {
+		content = m.output
+	} else if m.prevOutput == "" {
+		// No previous output yet — just indent all lines to match diff markers
 		var b strings.Builder
 		for i, l := range lines {
 			if i > 0 {
@@ -427,51 +440,52 @@ func (m model) buildContent() string {
 			}
 			b.WriteString("  " + l)
 		}
-		return b.String()
-	}
+		content = b.String()
+	} else {
+		prevLines := strings.Split(m.prevOutput, "\n")
+		diffs := computeDiff(prevLines, lines)
 
-	prevLines := strings.Split(m.prevOutput, "\n")
-	diffs := computeDiff(prevLines, lines)
+		var b strings.Builder
+		first := true
+		for idx := 0; idx < len(diffs); idx++ {
+			if !first {
+				b.WriteString("\n")
+			}
+			first = false
 
-	var b strings.Builder
-	first := true
-	for idx := 0; idx < len(diffs); idx++ {
-		if !first {
-			b.WriteString("\n")
-		}
-		first = false
-
-		d := diffs[idx]
-		switch d.op {
-		case diffEqual:
-			b.WriteString("  " + d.text)
-		case diffInsert:
-			b.WriteString(diffInsertMarker.Render("+ ") + diffAddStyle.Render(d.text))
-		case diffDelete:
-			// Single delete followed by single insert = replacement, show as change
-			if idx+1 < len(diffs) && diffs[idx+1].op == diffInsert {
-				if idx+2 >= len(diffs) || diffs[idx+2].op != diffInsert {
-					idx++
-					b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(diffs[idx].text))
-					continue
+			d := diffs[idx]
+			switch d.op {
+			case diffEqual:
+				b.WriteString("  " + d.text)
+			case diffInsert:
+				b.WriteString(diffInsertMarker.Render("+ ") + diffAddStyle.Render(d.text))
+			case diffDelete:
+				// Single delete followed by single insert = replacement, show as change
+				if idx+1 < len(diffs) && diffs[idx+1].op == diffInsert {
+					if idx+2 >= len(diffs) || diffs[idx+2].op != diffInsert {
+						idx++
+						b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(diffs[idx].text))
+						continue
+					}
 				}
+				count := 1
+				for idx+1 < len(diffs) && diffs[idx+1].op == diffDelete {
+					count++
+					idx++
+				}
+				label := fmt.Sprintf("(%d line removed)", count)
+				if count != 1 {
+					label = fmt.Sprintf("(%d lines removed)", count)
+				}
+				b.WriteString(diffDeleteMarker.Render("- ") + diffDelStyle.Render(label))
+			case diffChange:
+				b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(d.text))
 			}
-			count := 1
-			for idx+1 < len(diffs) && diffs[idx+1].op == diffDelete {
-				count++
-				idx++
-			}
-			label := fmt.Sprintf("(%d line removed)", count)
-			if count != 1 {
-				label = fmt.Sprintf("(%d lines removed)", count)
-			}
-			b.WriteString(diffDeleteMarker.Render("- ") + diffDelStyle.Render(label))
-		case diffChange:
-			b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(d.text))
 		}
+		content = b.String()
 	}
 
-	return b.String()
+	return content
 }
 
 func (m model) renderFooter() string {
@@ -547,6 +561,7 @@ func printLicense() {
 func main() {
 	var interval float64
 	var diffMode bool
+	var noWrap bool
 	var showLicense bool
 
 	rootCmd := &cobra.Command{
@@ -564,7 +579,7 @@ func main() {
 				return
 			}
 			dur := time.Duration(float64(time.Second) * interval)
-			m := initialModel(args[0], args[1:], dur, diffMode)
+			m := initialModel(args[0], args[1:], dur, diffMode, noWrap)
 			p := tea.NewProgram(m)
 			if _, err := p.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -575,6 +590,7 @@ func main() {
 
 	rootCmd.Flags().Float64VarP(&interval, "interval", "n", 2.0, "seconds between updates")
 	rootCmd.Flags().BoolVarP(&diffMode, "differences", "d", false, "highlight differences")
+	rootCmd.Flags().BoolVarP(&noWrap, "no-wrap", "w", false, "turn off line wrapping")
 	rootCmd.Flags().BoolVar(&showLicense, "license", false, "display the license")
 
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
