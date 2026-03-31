@@ -101,7 +101,7 @@ Watch Flux kustomizations with diff highlighting:
 - **No `--no-title` / `-t` flag.** The header bar cannot be hidden via a flag (though pressing **f** hides all chrome at runtime).
 
 
-- **No `--precise` / `-p` flag.** Intervals are measured from command completion, not wall-clock aligned.
+- **No `--precise` / `-p` flag.** The interval timer ticks independently of command execution. If a command is still running when a tick fires, that tick is skipped. GNU watch's default sleeps after completion; `--precise` tries to maintain wall-clock alignment by accounting for execution time.
 
 - **No permanent diff mode.** GNU watch supports `--differences=permanent`, which keeps all positions that have ever changed highlighted since the first iteration. gowatch only highlights differences between the two most recent runs.
 
