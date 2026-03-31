@@ -82,7 +82,7 @@ Watch Flux kustomizations with diff highlighting:
 
 - **Modern TUI.** Built with Bubble Tea and Lip Gloss. Features a styled header bar, bordered viewport, animated spinner during execution, and a contextual help bar.
 
-- **No ANSI color passthrough (`-c`/`--color`).** ANSI color/style sequences from command output are not currently interpreted or preserved.
+- **No `-c`/`--color` flag.** ANSI color sequences are always passed through. GNU watch strips them by default and requires `-c` to preserve them.
 
 - **No `--exec` / `-x` flag.** Commands are always passed to `sh -c`.
 
