@@ -86,7 +86,7 @@ Watch Flux kustomizations with diff highlighting:
 
 - **Modern TUI.** Built with Bubble Tea and Lip Gloss. Features a styled header bar, bordered viewport, animated spinner during execution, and a contextual help bar.
 
-- **No `-c`/`--color` flag.** ANSI color sequences are always passed through. GNU watch strips them by default and requires `-c` to preserve them.
+- **No `-c`/`--color` flag.** ANSI color sequences are always passed through. GNU watch strips them by default and requires `-c` to preserve them. Note that when diff mode is active, ANSI reset sequences in the command output can interfere with diff highlighting — a reset mid-line will cancel the diff background color for the remainder of that line. Future versions may offer modes to strip ANSI colors, use only diff markers without background styling, or keep the current behavior.
 
 - **No `--exec` / `-x` flag.** Commands are always passed to `sh -c`.
 
