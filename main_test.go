@@ -174,6 +174,35 @@ func TestDiffModeReplacementShowsChange(t *testing.T) {
 	}
 }
 
+func TestDiffModeAllLinesReplacedShowsChanges(t *testing.T) {
+	m := readyModel(withDiff)
+	// Column re-alignment: spacing changes but content is the same for 2 of 3 lines
+	m.prevOutput = "NAME   READY   STATUS\nfoo    True    OK\nbar    True    OK"
+	m.output = "NAME   READY     STATUS\nfoo    True      OK\nbar    Unknown   Reconciling"
+
+	content := m.buildContent()
+	// Header and foo lines differ only in spacing → should be equal (not changed)
+	if strings.Contains(content, "removed") {
+		t.Errorf("should not show removal marker, got %q", content)
+	}
+	// bar line has actual content change → should appear
+	if !strings.Contains(content, "bar    Unknown   Reconciling") {
+		t.Errorf("expected changed bar line in output, got %q", content)
+	}
+}
+
+func TestDiffModeNormalizesSpaces(t *testing.T) {
+	// Lines that differ only in spacing should be treated as equal
+	old := []string{"a  b  c", "x    y"}
+	new := []string{"a   b   c", "x  y"}
+	result := computeDiff(old, new)
+	for _, d := range result {
+		if d.op != diffEqual {
+			t.Errorf("expected all equal when only spacing differs, got %v %q", d.op, d.text)
+		}
+	}
+}
+
 func TestDiffModeMovedLinesNotMarked(t *testing.T) {
 	m := readyModel(withDiff)
 	// Insert a line at the top — lines below should NOT be marked changed
@@ -528,15 +557,15 @@ func TestKeyBindings(t *testing.T) {
 func TestShortHelpContainsAllBindings(t *testing.T) {
 	short := keys.ShortHelp()
 	// Should have: quit, refresh, faster, slower, diff, no-wrap, fullscreen, help
-	if len(short) < 8 {
-		t.Errorf("expected at least 8 short help bindings, got %d", len(short))
+	if len(short) < 10 {
+		t.Errorf("expected at least 10 short help bindings, got %d", len(short))
 	}
 }
 
 func TestFullHelpIsGrouped(t *testing.T) {
 	full := keys.FullHelp()
-	if len(full) != 3 {
-		t.Errorf("expected 3 help columns, got %d", len(full))
+	if len(full) != 4 {
+		t.Errorf("expected 4 help columns, got %d", len(full))
 	}
 }
 

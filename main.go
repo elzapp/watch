@@ -45,18 +45,21 @@ type keyMap struct {
 	ToggleDiff key.Binding
 	ToggleWrap key.Binding
 	Fullscreen key.Binding
+	Top        key.Binding
+	Bottom     key.Binding
 	Help       key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Quit, k.Refresh, k.Faster, k.Slower, k.ToggleDiff, k.ToggleWrap, k.Fullscreen, k.Help}
+	return []key.Binding{k.Quit, k.Refresh, k.Faster, k.Slower, k.ToggleDiff, k.ToggleWrap, k.Fullscreen, k.Top, k.Bottom, k.Help}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Quit, k.Suspend},
 		{k.Refresh, k.Faster, k.Slower},
-		{k.ToggleDiff, k.ToggleWrap, k.Fullscreen, k.Help},
+		{k.ToggleDiff, k.ToggleWrap, k.Fullscreen},
+		{k.Top, k.Bottom, k.Help},
 	}
 }
 
@@ -93,6 +96,14 @@ var keys = keyMap{
 		key.WithKeys("f"),
 		key.WithHelp("f", "fullscreen"),
 	),
+	Top: key.NewBinding(
+		key.WithKeys("home"),
+		key.WithHelp("gg", "top"),
+	),
+	Bottom: key.NewBinding(
+		key.WithKeys("end"),
+		key.WithHelp("G", "bottom"),
+	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "help"),
@@ -117,6 +128,7 @@ type model struct {
 	executing  bool
 	ready      bool
 	fullscreen bool
+	pendingG   bool
 
 	viewport viewport.Model
 	spinner  spinner.Model
@@ -169,6 +181,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				viewport.WithHeight(msg.Height),
 			)
 			m.viewport.SoftWrap = !m.noWrap
+			// Override default keymap to avoid conflicts with our keys
+			km := viewport.DefaultKeyMap()
+			km.PageDown = key.NewBinding(key.WithKeys("pgdown"))
+			km.PageUp = key.NewBinding(key.WithKeys("pgup"))
+			km.HalfPageDown = key.NewBinding(key.WithKeys("ctrl+d"))
+			km.HalfPageUp = key.NewBinding(key.WithKeys("ctrl+u"))
+			m.viewport.KeyMap = km
 			m.ready = true
 		}
 		m.resizeViewport()
@@ -176,6 +195,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// Handle G (go to bottom) and gg (go to top)
+		if msg.Code == 'g' {
+			if msg.ShiftedCode == 'G' {
+				m.pendingG = false
+				m.viewport.GotoBottom()
+				return m, nil
+			}
+			if m.pendingG {
+				m.pendingG = false
+				m.viewport.GotoTop()
+				return m, nil
+			}
+			m.pendingG = true
+			return m, nil
+		}
+		m.pendingG = false
+
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
@@ -204,6 +240,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Fullscreen):
 			m.fullscreen = !m.fullscreen
 			m.resizeViewport()
+			return m, nil
+		case key.Matches(msg, m.keys.Bottom):
+			m.viewport.GotoBottom()
 			return m, nil
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
@@ -261,7 +300,11 @@ func (m *model) updateViewportContent() {
 	if !m.ready {
 		return
 	}
+	wasAtBottom := m.viewport.AtBottom() && !m.viewport.AtTop()
 	m.viewport.SetContent(m.buildContent())
+	if wasAtBottom {
+		m.viewport.GotoBottom()
+	}
 }
 
 func (m model) View() tea.View {
@@ -305,11 +348,45 @@ type diffLine struct {
 	text string // the new (or deleted) line text
 }
 
+// normalizeSpaces collapses runs of two or more spaces into a single space,
+// so that column re-alignment in tabular output doesn't trigger false diffs.
+func normalizeSpaces(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	spaceCount := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' {
+			spaceCount++
+		} else {
+			if spaceCount > 0 {
+				b.WriteByte(' ')
+				spaceCount = 0
+			}
+			b.WriteByte(s[i])
+		}
+	}
+	if spaceCount > 0 {
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
 // computeDiff produces a sequence of diffLine entries using longest common
 // subsequence so that inserts/deletes don't cause every subsequent line to
-// appear changed.
+// appear changed. Lines are compared with whitespace normalized (runs of
+// spaces collapsed) so that column re-alignment doesn't cause false changes.
 func computeDiff(old, new []string) []diffLine {
 	n, m := len(old), len(new)
+
+	// Pre-compute normalized versions for comparison
+	normOld := make([]string, n)
+	for i, s := range old {
+		normOld[i] = normalizeSpaces(s)
+	}
+	normNew := make([]string, m)
+	for i, s := range new {
+		normNew[i] = normalizeSpaces(s)
+	}
 
 	// LCS table
 	dp := make([][]int, n+1)
@@ -318,7 +395,7 @@ func computeDiff(old, new []string) []diffLine {
 	}
 	for i := 1; i <= n; i++ {
 		for j := 1; j <= m; j++ {
-			if old[i-1] == new[j-1] {
+			if normOld[i-1] == normNew[j-1] {
 				dp[i][j] = dp[i-1][j-1] + 1
 			} else {
 				dp[i][j] = max(dp[i-1][j], dp[i][j-1])
@@ -330,7 +407,7 @@ func computeDiff(old, new []string) []diffLine {
 	var result []diffLine
 	i, j := n, m
 	for i > 0 || j > 0 {
-		if i > 0 && j > 0 && old[i-1] == new[j-1] {
+		if i > 0 && j > 0 && normOld[i-1] == normNew[j-1] {
 			result = append(result, diffLine{op: diffEqual, text: new[j-1]})
 			i--
 			j--
@@ -460,24 +537,43 @@ func (m model) buildContent() string {
 			case diffInsert:
 				b.WriteString(diffInsertMarker.Render("+ ") + diffAddStyle.Render(d.text))
 			case diffDelete:
-				// Single delete followed by single insert = replacement, show as change
-				if idx+1 < len(diffs) && diffs[idx+1].op == diffInsert {
-					if idx+2 >= len(diffs) || diffs[idx+2].op != diffInsert {
-						idx++
-						b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(diffs[idx].text))
-						continue
-					}
-				}
-				count := 1
+				// Collect consecutive deletes
+				deletes := []string{d.text}
 				for idx+1 < len(diffs) && diffs[idx+1].op == diffDelete {
-					count++
 					idx++
+					deletes = append(deletes, diffs[idx].text)
 				}
-				label := fmt.Sprintf("(%d line removed)", count)
-				if count != 1 {
-					label = fmt.Sprintf("(%d lines removed)", count)
+				// Collect consecutive inserts that follow
+				var inserts []string
+				for idx+1 < len(diffs) && diffs[idx+1].op == diffInsert {
+					idx++
+					inserts = append(inserts, diffs[idx].text)
 				}
-				b.WriteString(diffDeleteMarker.Render("- ") + diffDelStyle.Render(label))
+				// Pair up as changes
+				paired := min(len(deletes), len(inserts))
+				for i := 0; i < paired; i++ {
+					if i > 0 {
+						b.WriteString("\n")
+					}
+					b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(inserts[i]))
+				}
+				// Leftover deletes → collapsed removal
+				remaining := len(deletes) - paired
+				if remaining > 0 {
+					if paired > 0 {
+						b.WriteString("\n")
+					}
+					label := fmt.Sprintf("(%d line removed)", remaining)
+					if remaining != 1 {
+						label = fmt.Sprintf("(%d lines removed)", remaining)
+					}
+					b.WriteString(diffDeleteMarker.Render("- ") + diffDelStyle.Render(label))
+				}
+				// Leftover inserts
+				for i := paired; i < len(inserts); i++ {
+					b.WriteString("\n")
+					b.WriteString(diffInsertMarker.Render("+ ") + diffAddStyle.Render(inserts[i]))
+				}
 			case diffChange:
 				b.WriteString(diffChangeMarker.Render("~ ") + diffAddStyle.Render(d.text))
 			}

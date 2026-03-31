@@ -39,6 +39,8 @@ The command is given to `sh -c`, which means shell features like pipes, redirect
 | **?** | Toggle full help view |
 | **j/k**, **Up/Down** | Scroll output |
 | **PgUp/PgDn** | Scroll by page |
+| **Ctrl+U/Ctrl+D** | Scroll by half page |
+| **gg** / **G** | Jump to top / bottom |
 | **Home/End** | Jump to top / bottom |
 | Mouse wheel | Scroll output |
 
