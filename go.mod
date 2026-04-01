@@ -1,4 +1,4 @@
-module gowatch
+module github.com/elzapp/watch
 
 go 1.25.8
 
